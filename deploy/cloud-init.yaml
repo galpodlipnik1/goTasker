@@ -3,6 +3,11 @@
 package_update: true
 package_upgrade: true
 
+swap:
+  filename: /swap.img
+  size: "4G"
+  maxsize: "4G"
+
 packages:
   - redis-server
   - sqlite3
@@ -50,17 +55,42 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
-runcmd:
-  - curl -L https://go.dev/dl/go1.22.0.linux-amd64.tar.gz -o /tmp/go.tar.gz
-  - tar -C /usr/local -xzf /tmp/go.tar.gz
-  - echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
+  - path: /root/build_gotasker.sh
+    permissions: '0744' 
+    content: |
+      #!/bin/bash
+      
+      # Set GOROOT and PATH
+      export GOROOT="/usr/local/go"
+      export PATH="$PATH:$GOROOT/bin"
+      
+      # CRITICAL FIX: Use /tmp for GOCACHE/GOPATH to avoid "permission denied" error
+      export GOPATH="/tmp/go-build-cache" 
+      export GOCACHE="/tmp/go-build-cache/cache"
+      mkdir -p $GOPATH $GOCACHE
+      
+      # Download and Extract Go toolchain
+      curl -L https://go.dev/dl/go1.22.0.linux-amd64.tar.gz -o /tmp/go.tar.gz
+      tar -C /usr/local -xzf /tmp/go.tar.gz
 
+      # Run go mod tidy and build the application
+      cd /opt/gotasker/src/app
+      /usr/local/go/bin/go mod tidy
+      /usr/local/go/bin/go build -o /opt/gotasker/gotasker
+      
+      # Clean up and exit with the build status code
+      rm -f /tmp/go.tar.gz
+      exit $?
+
+runcmd:
   - useradd -r -s /usr/sbin/nologin gotasker || true
   - mkdir -p /opt/gotasker /var/www/gotasker /var/lib/gotasker
-
+  - chown -R gotasker:gotasker /opt/gotasker
   - git clone https://github.com/galpodlipnik1/goTasker.git /opt/gotasker/src
-  - cd /opt/gotasker/src/app && /usr/local/go/bin/go build -o /opt/gotasker/gotasker
+  
+  - /root/build_gotasker.sh 
 
+  - chown -R gotasker:gotasker /opt/gotasker 
   - cp /opt/gotasker/src/deploy/env/app.env /etc/gotasker.env
   - cp -r /opt/gotasker/src/deploy/www/* /var/www/gotasker/
   - chown -R gotasker:gotasker /var/lib/gotasker
