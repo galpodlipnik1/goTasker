@@ -58,7 +58,7 @@ runcmd:
   - useradd -r -s /usr/sbin/nologin gotasker || true
   - mkdir -p /opt/gotasker /var/www/gotasker /var/lib/gotasker
 
-  - git clone https://github.com/YOUR_USER/YOUR_REPO.git /opt/gotasker/src
+  - git clone https://github.com/galpodlipnik1/goTasker.git /opt/gotasker/src
   - cd /opt/gotasker/src/app && /usr/local/go/bin/go build -o /opt/gotasker/gotasker
 
   - cp /opt/gotasker/src/deploy/env/app.env /etc/gotasker.env
