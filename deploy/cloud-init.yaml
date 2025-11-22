@@ -1,0 +1,74 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - redis-server
+  - sqlite3
+  - git
+  - ca-certificates
+  - curl
+  - nginx
+
+write_files:
+  - path: /etc/nginx/sites-available/default
+    content: |
+      server {
+          listen 80;
+          server_name _;
+          add_header X-Response-Time $request_time always;
+
+          location / {
+              root /var/www/gotasker;
+              index index.html;
+              try_files $uri $uri/ /index.html;
+          }
+
+          location /api/ {
+              proxy_pass http://127.0.0.1:8081;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          }
+      }
+
+  - path: /etc/systemd/system/gotasker.service
+    content: |
+      [Unit]
+      Description=GoTasker API
+      After=network.target redis-server.service
+
+      [Service]
+      User=gotasker
+      Group=gotasker
+      WorkingDirectory=/opt/gotasker
+      ExecStart=/opt/gotasker/gotasker
+      EnvironmentFile=/etc/gotasker.env
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - curl -L https://go.dev/dl/go1.22.0.linux-amd64.tar.gz -o /tmp/go.tar.gz
+  - tar -C /usr/local -xzf /tmp/go.tar.gz
+  - echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
+
+  - useradd -r -s /usr/sbin/nologin gotasker || true
+  - mkdir -p /opt/gotasker /var/www/gotasker /var/lib/gotasker
+
+  - git clone https://github.com/YOUR_USER/YOUR_REPO.git /opt/gotasker/src
+  - cd /opt/gotasker/src/app && /usr/local/go/bin/go build -o /opt/gotasker/gotasker
+
+  - cp /opt/gotasker/src/deploy/env/app.env /etc/gotasker.env
+  - cp -r /opt/gotasker/src/deploy/www/* /var/www/gotasker/
+  - chown -R gotasker:gotasker /var/lib/gotasker
+
+  - systemctl daemon-reload
+  - systemctl enable redis-server
+  - systemctl enable gotasker
+  - systemctl enable nginx
+  - systemctl restart redis-server
+  - systemctl restart gotasker
+  - systemctl restart nginx

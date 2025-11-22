@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GoTasker</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f9f9f9;
+      color: #222;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    #task-form {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 10px;
+      font-size: 16px;
+    }
+
+    button {
+      padding: 10px 16px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      background: #0077ff;
+      color: white;
+      border-radius: 4px;
+    }
+
+    button:hover {
+      background: #005fcc;
+    }
+
+    .task {
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 6px;
+      background: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid #ddd;
+    }
+
+    .task.completed {
+      background: #e3ffe3;
+      text-decoration: line-through;
+    }
+
+    .task-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .small-btn {
+      padding: 6px 10px;
+      font-size: 12px;
+      background: #444;
+    }
+
+    .small-btn.delete {
+      background: #cc0000;
+    }
+
+    .small-btn:hover {
+      opacity: 0.8;
+    }
+  </style>
+
+</head>
+<body>
+
+  <h1>GoTasker</h1>
+
+  <!-- Create Task Form -->
+  <form id="task-form">
+    <input id="task-title" type="text" placeholder="New task..." required />
+    <button type="submit">Add Task</button>
+    <button type="button" onclick="generateTasks()" style="background: #28a745; margin-left: 10px;">Generate 1000 Tasks</button>
+    <button type="button" onclick="clearTasks()" style="background: #dc3545; margin-left: 10px; color: white; border: none; padding: 10px 16px; border-radius: 4px; cursor: pointer;">Clear DB</button>
+  </form>
+
+  <!-- Task List -->
+  <div id="metrics" style="margin-bottom: 10px; font-size: 14px; color: #666;"></div>
+  <div id="tasks"></div>
+
+  <script>
+    const API = "/api/tasks";
+
+    async function loadTasks() {
+      const res = await fetch(API);
+      
+      const cacheHit = res.headers.get("X-Cache-Hit");
+      const responseTime = res.headers.get("X-Response-Time");
+      
+      const metricsDiv = document.getElementById("metrics");
+      
+      let metricsHtml = "";
+      if (cacheHit) {
+        metricsHtml += `Cache Hit: <b>${cacheHit}</b>`;
+      }
+      if (responseTime) {
+        // Nginx returns seconds (e.g. 0.002), convert to ms for display
+        const ms = Math.round(parseFloat(responseTime) * 1000);
+        if (metricsHtml) metricsHtml += " | ";
+        metricsHtml += `Time: <b>${ms}ms</b>`;
+      }
+
+      if (metricsHtml) {
+        metricsDiv.innerHTML = metricsHtml;
+        metricsDiv.style.display = 'block';
+      } else {
+        metricsDiv.style.display = 'none';
+      }
+
+      const tasks = await res.json();
+      renderTasks(tasks);
+    }
+
+    async function createTask(title) {
+      const res = await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title })
+      });
+      return res.json();
+    }
+
+    async function generateTasks() {
+      const btn = document.querySelector('button[onclick="generateTasks()"]');
+      const originalText = btn.innerText;
+      btn.innerText = "Generating...";
+      btn.disabled = true;
+
+      try {
+        // Default to 1000, but API supports ?count=N
+        await fetch(API + "/generate?count=1000", { method: "POST" });
+        loadTasks();
+      } catch (e) {
+        console.error(e);
+        alert("Failed to generate tasks");
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    async function clearTasks() {
+      if (!confirm("Are you sure you want to delete ALL tasks?")) return;
+      
+      const btn = document.querySelector('button[onclick="clearTasks()"]');
+      const originalText = btn.innerText;
+      btn.innerText = "Clearing...";
+      btn.disabled = true;
+
+      try {
+        await fetch(API, { method: "DELETE" });
+        loadTasks();
+      } catch (e) {
+        console.error(e);
+        alert("Failed to clear tasks");
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    function renderTasks(tasks) {
+      const container = document.getElementById("tasks");
+      container.innerHTML = "";
+
+      tasks.forEach((t) => {
+        const div = document.createElement("div");
+        div.className = "task" + (t.completed ? " completed" : "");
+
+        div.innerHTML = `
+          <span>${t.title}</span>
+          <div class="task-buttons">
+            <button class="small-btn delete" onclick="deleteTask(${t.id})">Delete</button>
+          </div>
+        `;
+
+        container.appendChild(div);
+      });
+    }
+
+    async function deleteTask(id) {
+      await fetch(API + "/" + id, { method: "DELETE" });
+      loadTasks();
+    }
+
+    // Form handler
+    document.getElementById("task-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("task-title");
+      if (!input.value.trim()) return;
+
+      await createTask(input.value.trim());
+      input.value = "";
+      loadTasks();
+    });
+
+    loadTasks();
+  </script>
+
+</body>
+</html>

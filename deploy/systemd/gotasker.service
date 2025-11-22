@@ -1,0 +1,15 @@
+[Unit]
+Description=GoTasker API
+After=network.target redis-server.service
+
+[Service]
+User=gotasker
+Group=gotasker
+WorkingDirectory=/opt/gotasker
+ExecStart=/opt/gotasker/gotasker
+EnvironmentFile=/etc/gotasker.env
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
