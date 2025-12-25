@@ -1,0 +1,70 @@
+services:
+  app:
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile
+    container_name: gotasker-app
+    ports:
+      - "8081:8081"
+    environment:
+      - APP_ADDR=:8081
+      - SQLITE_PATH=/var/lib/gotasker/tasks.db
+      - REDIS_ADDR=redis:6379
+      - LOG_LEVEL=info
+    volumes:
+      - gotasker_data:/var/lib/gotasker
+    depends_on:
+      - redis
+    networks:
+      - gotasker-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: gotasker-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - gotasker-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: gotasker-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/docker-default:/etc/nginx/conf.d/default.conf:ro
+      - ./www:/usr/share/nginx/html:ro
+    depends_on:
+      - app
+    networks:
+      - gotasker-network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gotasker-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    networks:
+      - gotasker-network
+    restart: unless-stopped
+
+volumes:
+  gotasker_data:
+  redis_data:
+  prometheus_data:
+
+networks:
+  gotasker-network:
+    driver: bridge
