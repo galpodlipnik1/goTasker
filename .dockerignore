@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Version control
+.hg
+.svn
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+bin/
+dist/
+build/
+*.o
+*.a
+*.so
+
+# Vagrant
+.vagrant/
+*.box
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+docker-compose.yaml
+
+# Documentation
+README.md
+docs/
+*.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+
+# Node (if applicable)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Python (if applicable)
+__pycache__/
+*.pyc
+.python-version
+venv/
+env/
+
+# Misc
+*.log
+.env
+.env.local
+.env.*.local
