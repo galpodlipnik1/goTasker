@@ -16,7 +16,10 @@ RUN go mod download
 COPY app/ .
 
 # Build the application
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o gotasker .
+ARG TARGETARCH
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -o gotasker .
+
+
 
 # Runtime stage
 FROM alpine:latest
