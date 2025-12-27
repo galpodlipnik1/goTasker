@@ -25,7 +25,9 @@ GoTasker is a Golang based Task Management application stack. The application st
 
 ## Deployment Instructions
 
-### Option 1: Vagrant
+### Part 1: Virtual Machine Deployment
+
+#### Option 1: Vagrant
 
 **Prerequisites:**
 
@@ -45,9 +47,9 @@ GoTasker is a Golang based Task Management application stack. The application st
     ```
 4.  Access the application at: [http://localhost:8443](http://localhost:8443)
 
-![Vagrant Success](/images/{A1D2B840-A555-4A69-B2FE-41C0C2A6EF4F}.png)
+![Vagrant Success](/images/vagrant_success.png)
 
-### Option 2: Cloud-init
+#### Option 2: Cloud-init
 
 **Steps:**
 
@@ -55,12 +57,94 @@ GoTasker is a Golang based Task Management application stack. The application st
 2.  **Important**: Update the `git clone` URL in `cloud-init.yaml` to point to your repository.
 3.  Once the instance is running, access the application via the VM's Public IP.
 
-![Multipass Dashboard](/images/{29138FFB-0B59-45A3-ABDA-45E860528BCB}.png)
-![App Accessed via VM's IP](/images/{1FDA0633-6C4F-4177-938F-3860DEFEEAB6}.png)
+![Multipass Dashboard](/images/multipass_dashboard.png)
+![App Accessed via VM's IP](/images/access_via_ip.png)
+
+### Part 2: Containerized Deployment
+
+#### 1. Manual Docker Build
+
+The application uses a **Multi-Stage Dockerfile** (`deploy/Dockerfile`) to ensure a small and secure final image.
+
+-   **Builder Stage**: Uses `golang:1.22-alpine`. Installs build dependencies (`gcc`, `musl-dev`), downloads Go modules, and compiles the application with CGO enabled.
+-   **Runtime Stage**: Uses `alpine:latest`. Installs runtime dependencies (`curl`, `ca-certificates`), copies the compiled binary from the builder stage, and sets the entrypoint.
+
+**To build the image manually:**
+
+```bash
+# Run from the root of the repository
+docker build -t gotasker:local -f deploy/Dockerfile .
+```
+
+#### 2. Docker Compose
+
+The `deploy/docker-compose.yaml` file orchestrates the entire stack. It pulls the pre-built image from the GitHub Container Registry (GHCR) by default.
+
+**Services:**
+-   **Traefik**: Acts as the edge router/reverse proxy. It handles incoming HTTP/HTTPS requests, manages Let's Encrypt SSL certificates automatically, and routes traffic to the backend services.
+-   **App**: The Go backend service. It connects to Redis and SQLite.
+    -   *Environment Variables*: Configured to connect to Redis and define the SQLite path.
+    -   *Volumes*: Persists the SQLite database in a Docker volume.
+-   **Redis**: Provides caching. Persists data to a volume.
+-   **Nginx**: Serves the static frontend files (`deploy/www`) and proxies API requests to the Go app.
+-   **Prometheus**: Collects metrics from the Go application and itself.
+
+**Configuration Files:**
+
+The `deploy` directory contains specific configurations for the services:
+
+-   **Nginx (`deploy/nginx/`)**:
+    -   `default`: Configuration for VM/Vagrant deployment. Proxies to `127.0.0.1:8081`.
+    -   `docker-default`: Configuration for Docker deployment. Proxies to the `app` service container.
+-   **Prometheus (`deploy/prometheus/prometheus.yml`)**:
+    -   Configured to scrape metrics from the `gotasker` app service on port 8081 and its own metrics on port 9090.
+-   **Docker Compose (`deploy/docker-compose.yaml`)**:
+    -   This is the production-ready configuration including Traefik for SSL termination and load balancing.
+    -   *Note*: For development, you might want to override the Traefik labels or use a simpler compose file (e.g., `docker-compose.override.yaml`) to expose ports directly.
+
+**Commands:**
+
+```bash
+cd deploy
+
+# Start all services in detached mode
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop all services
+docker-compose down
+```
+
+#### 3. CI/CD Pipeline (GitHub Actions)
+
+The project utilizes GitHub Actions (`.github/workflows/docker-build.yml`) for Continuous Integration and Deployment.
+
+**Workflow Triggers:**
+-   **Push to `master`**: Triggers a build, push to GHCR, and deployment to the VPS.
+-   **Tags (`v*`)**: Triggers a build, push, and creates a GitHub Release.
+-   **Pull Requests**: Triggers a build check (no push).
+
+**Workflow Steps:**
+1.  **Checkout**: Clones the repository.
+2.  **Setup Buildx**: Initializes Docker Buildx for multi-platform builds.
+3.  **Metadata**: Extracts tags and labels based on the git ref (branch or tag).
+4.  **Login**: Authenticates with GitHub Container Registry (GHCR).
+5.  **Build & Push**:
+    -   Builds the image for multiple platforms (`linux/amd64`, `linux/arm64`).
+    -   Pushes the image to `ghcr.io/<owner>/gotasker`.
+    -   Uses GitHub Actions cache to speed up builds.
+6.  **Deploy to VPS**:
+    -   Connects to the production server via SSH.
+    -   Pulls the latest code.
+    -   Logs into GHCR.
+    -   Updates the running services with `docker compose up -d --pull=always`.
+7.  **Release**: Creates a GitHub Release with auto-generated notes (only for tags).
 
 ### Application UI
 
-![App UI](/images/{762791B3-BF02-4ADA-9E27-588AF8F68DC0}.png)
+![App UI](/images/app_ui.png)
 
 ### Performance Testing
 
@@ -68,7 +152,7 @@ GoTasker is a Golang based Task Management application stack. The application st
 2.  **Check Metrics**: Observe the "Time" metric. It should remain low due to Redis caching.
 3.  **Cache Hit**: Refresh the page. The "Cache Hit" indicator should show **true**.
 
-![Cache Hit](/images/{DAC93F10-0626-437A-B1C5-48E79BC2C317}.png)
+![Cache Hit](/images/cache_hit.png)
 
 ## Security
 
@@ -83,11 +167,14 @@ GoTasker is a Golang based Task Management application stack. The application st
 ├── app/                # Go Application Source Code
 │   ├── main.go         # API Logic
 │   └── go.mod          # Dependencies
+├── .github/            # GitHub Actions Workflows
 ├── deploy/             # Deployment Configuration
 │   ├── nginx/          # Nginx Config
 │   ├── systemd/        # Systemd Service File
 │   ├── www/            # Static Frontend (HTML/JS)
 │   ├── env/            # Environment Variables
+│   ├── docker-compose.yaml # Docker Compose Config
+│   ├── Dockerfile      # Docker Build File
 │   ├── provision.sh    # Vagrant Provisioning Script
 │   ├── cloud-init.yaml # Cloud-init Configuration
 │   └── Vagrantfile     # Vagrant Configuration

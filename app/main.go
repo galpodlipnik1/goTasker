@@ -12,9 +12,71 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	_ "modernc.org/sqlite"
 )
+
+var (
+	httpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"method", "path", "status"},
+	)
+	httpRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "Duration of HTTP requests in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"method", "path"},
+	)
+	tasksCreatedTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "gotasker_tasks_created_total",
+			Help: "Total number of tasks created",
+		},
+	)
+	tasksDeletedTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "gotasker_tasks_deleted_total",
+			Help: "Total number of tasks deleted",
+		},
+	)
+	dbOperationDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "gotasker_db_operation_duration_seconds",
+			Help:    "Duration of database operations",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"operation"},
+	)
+	cacheHitsTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "gotasker_cache_hits_total",
+			Help: "Total number of Redis cache hits",
+		},
+	)
+	cacheMissesTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "gotasker_cache_misses_total",
+			Help: "Total number of Redis cache misses",
+		},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(httpRequestsTotal)
+	prometheus.MustRegister(httpRequestDuration)
+	prometheus.MustRegister(tasksCreatedTotal)
+	prometheus.MustRegister(tasksDeletedTotal)
+	prometheus.MustRegister(dbOperationDuration)
+	prometheus.MustRegister(cacheHitsTotal)
+	prometheus.MustRegister(cacheMissesTotal)
+}
 
 type Task struct {
 	ID        int64  `json:"id"`
@@ -62,6 +124,9 @@ func main() {
 
 	r := gin.Default()
 
+	r.Use(prometheusMiddleware())
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
 	r.GET("/healthz", app.handleHealth)
 	api := r.Group("/api/tasks")
 	{
@@ -98,6 +163,25 @@ func initSchema(db *sql.DB) error {
 	return err
 }
 
+func prometheusMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.FullPath()
+
+		c.Next()
+
+		duration := time.Since(start).Seconds()
+		status := strconv.Itoa(c.Writer.Status())
+
+		if path == "" {
+			path = "unknown"
+		}
+
+		httpRequestsTotal.WithLabelValues(c.Request.Method, path, status).Inc()
+		httpRequestDuration.WithLabelValues(c.Request.Method, path).Observe(duration)
+	}
+}
+
 func (a *App) handleHealth(c *gin.Context) {
 	c.String(http.StatusOK, "ok")
 }
@@ -108,6 +192,7 @@ func (a *App) handleListTasks(c *gin.Context) {
 	//Try redis cache
 	if a.Redis != nil {
 		if data, err := a.Redis.Get(ctx, "tasks:all").Result(); err == nil {
+			cacheHitsTotal.Inc()
 			c.Header("X-Cache-Hit", "true")
 			c.Header("Content-Type", "application/json")
 			c.String(http.StatusOK, data)
@@ -115,10 +200,13 @@ func (a *App) handleListTasks(c *gin.Context) {
 		}
 	}
 
+	cacheMissesTotal.Inc()
 	c.Header("X-Cache-Hit", "false")
 
 	//Fallback to db
+	start := time.Now()
 	rows, err := a.DB.QueryContext(ctx, "SELECT id, title, completed FROM tasks ORDER BY id DESC")
+	dbOperationDuration.WithLabelValues("list").Observe(time.Since(start).Seconds())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
@@ -163,12 +251,15 @@ func (a *App) handleCreateTask(c *gin.Context) {
 		return
 	}
 
+	start := time.Now()
 	res, err := a.DB.ExecContext(ctx, "INSERT INTO tasks(title, completed) VALUES (?, 0)", input.Title)
+	dbOperationDuration.WithLabelValues("create").Observe(time.Since(start).Seconds())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
 	id, _ := res.LastInsertId()
+	tasksCreatedTotal.Inc()
 
 	if a.Redis != nil {
 		_ = a.Redis.Del(ctx, "tasks:all").Err()
@@ -186,9 +277,16 @@ func (a *App) handleDeleteTask(c *gin.Context) {
 	ctx := c.Request.Context()
 	id := c.Param("id")
 
-	if _, err := a.DB.ExecContext(ctx, "DELETE FROM tasks WHERE id = ?", id); err != nil {
+	start := time.Now()
+	res, err := a.DB.ExecContext(ctx, "DELETE FROM tasks WHERE id = ?", id)
+	dbOperationDuration.WithLabelValues("delete").Observe(time.Since(start).Seconds())
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
+	}
+
+	if n, _ := res.RowsAffected(); n > 0 {
+		tasksDeletedTotal.Inc()
 	}
 
 	if a.Redis != nil {
@@ -221,6 +319,7 @@ func (a *App) handleGenerateTasks(c *gin.Context) {
 	}
 	defer stmt.Close()
 
+	start := time.Now()
 	for i := 1; i <= count; i++ {
 		if _, err := stmt.ExecContext(ctx, fmt.Sprintf("Task %d", i)); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
@@ -232,6 +331,8 @@ func (a *App) handleGenerateTasks(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
+	dbOperationDuration.WithLabelValues("generate").Observe(time.Since(start).Seconds())
+	tasksCreatedTotal.Add(float64(count))
 
 	if a.Redis != nil {
 		_ = a.Redis.Del(ctx, "tasks:all").Err()
@@ -243,9 +344,16 @@ func (a *App) handleGenerateTasks(c *gin.Context) {
 func (a *App) handleClearTasks(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if _, err := a.DB.ExecContext(ctx, "DELETE FROM tasks"); err != nil {
+	start := time.Now()
+	res, err := a.DB.ExecContext(ctx, "DELETE FROM tasks")
+	dbOperationDuration.WithLabelValues("clear").Observe(time.Since(start).Seconds())
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
+	}
+
+	if n, _ := res.RowsAffected(); n > 0 {
+		tasksDeletedTotal.Add(float64(n))
 	}
 
 	if a.Redis != nil {
