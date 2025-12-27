@@ -23,7 +23,7 @@ services:
       # - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       # - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
 
-      # Dashboard
+      - "--api=true"
       - "--api.dashboard=true"
 
     ports:
