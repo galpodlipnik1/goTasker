@@ -102,6 +102,7 @@ volumes:
   gotasker_data:
   redis_data:
   prometheus_data:
+  traefik_letsencrypt:
 
 networks:
   gotasker-network:
