@@ -6,6 +6,7 @@ services:
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=gotasker-network"
 
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
