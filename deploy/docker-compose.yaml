@@ -16,7 +16,7 @@ services:
       - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
 
       # Staging
-      #- "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      - "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
 
       # Redirect HTTP → HTTPS
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
@@ -73,7 +73,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.gotasker.entrypoints=websecure"
       - "traefik.http.routers.gotasker.tls.certresolver=le"
-      - "traefik.http.routers.gotasker.rule=Host(`devops.radovan.si`) && PathPrefix(`/`)"
+      - "traefik.http.routers.gotasker.rule=Host(`devops.radovan.si`)"
       - "traefik.http.services.gotasker.loadbalancer.server.port=80"
 
     restart: unless-stopped

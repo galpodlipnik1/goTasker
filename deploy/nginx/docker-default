@@ -1,12 +1,13 @@
 server {
     listen 80;
     server_name _;
+
     add_header X-Response-Time $request_time always;
 
     location / {
         root /usr/share/nginx/html;
         index index.html;
-        try_files $uri $uri/ =404;
+        try_files $uri $uri/ /index.html;
     }
 
     location /api/ {
