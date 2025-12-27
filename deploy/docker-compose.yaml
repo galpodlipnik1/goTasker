@@ -32,7 +32,7 @@ services:
 
     environment:
       - CF_API_EMAIL=aradovan5@gmail.com
-      - CF_API_KEY=${{ secrets.CLOUDFLARE_API_KEY }}
+      - CF_API_KEY=${CF_API_KEY}
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
