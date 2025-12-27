@@ -1,0 +1,114 @@
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      # Use DNS challenge
+      - "--certificatesresolvers.le.acme.email=aradovan5@gmail.com"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.le.acme.dnschallenge=true"
+      - "--certificatesresolvers.le.acme.dnschallenge.provider=cloudflare"
+
+      # Staging
+      - "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+
+      # Redirect HTTP → HTTPS
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+      # Dashboard
+      - "--api.dashboard=true"
+
+    ports:
+      - "8080:80"
+      - "8443:443"
+
+    environment:
+      - CF_API_EMAIL=aradovan5@gmail.com
+      - CF_API_KEY=${{ secrets.CLOUDFLARE_API_KEY }}
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+
+    networks:
+      - gotasker-network
+  app:
+    image: ghcr.io/galpodlipnik1/gotasker:latest
+    environment:
+      - APP_ADDR=:8081
+      - SQLITE_PATH=/var/lib/gotasker/tasks.db
+      - REDIS_ADDR=redis:6379
+      - LOG_LEVEL=info
+    volumes:
+      - gotasker_data:/var/lib/gotasker
+    labels:
+      - "traefik.enable=true"
+
+      - "traefik.http.routers.gotasker.rule=Host(`devops.radovan.si`)"
+      - "traefik.http.routers.gotasker.entrypoints=websecure"
+      - "traefik.http.routers.gotasker.tls.certresolver=le"
+
+      #- "traefik.http.services.gotasker.loadbalancer.server.port=8081"
+
+    depends_on:
+      - redis
+    networks:
+      - gotasker-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: gotasker-redis
+    volumes:
+      - redis_data:/data
+    networks:
+      - gotasker-network
+    restart: unless-stopped
+
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: gotasker-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/docker-default:/etc/nginx/conf.d/default.conf:ro
+  #     - ./www:/usr/share/nginx/html:ro
+  #   depends_on:
+  #     - app
+  #   networks:
+  #     - gotasker-network
+  #   restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gotasker-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    networks:
+      - gotasker-network
+    restart: unless-stopped
+
+volumes:
+  gotasker_data:
+  redis_data:
+  prometheus_data:
+  traefik_letsencrypt:
+
+networks:
+  gotasker-network:
+    driver: bridge
