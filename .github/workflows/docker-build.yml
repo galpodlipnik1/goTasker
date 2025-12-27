@@ -73,13 +73,8 @@ jobs:
           TELEPORT_PASSWORD: ${{ secrets.TELEPORT_PASSWORD }}
           GIT_HUB_TOKEN: ${{ secrets.GIT_HUB_TOKEN }}
         run: |
-          # Download and install tsh
-          cd /tmp
-          curl -L -o teleport.tar.gz https://api.github.com/repos/gravitational/teleport/tarball/v18.6.1
-          tar xzf teleport.tar.gz
-          sudo mv gravitational-teleport-*/build/tsh /usr/local/bin/
-          rm -rf teleport.tar.gz gravitational-teleport-*
-          cd -
+          # Install Teleport
+          curl https://cdn.teleport.dev/install-connect.sh | bash -s 18.6.2
 
           # Login to Teleport
           echo "$TELEPORT_PASSWORD" | tsh login --proxy=devops.lrk.si --user=aradovan --password-file=/dev/stdin
