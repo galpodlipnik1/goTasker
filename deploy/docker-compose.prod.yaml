@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/galpodlipnik/gotasker:latest
+    image: ghcr.io/galpodlipnik1/gotasker:latest
     ports:
       - "8081:8081"
     environment:
