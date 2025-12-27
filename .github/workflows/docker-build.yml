@@ -5,6 +5,7 @@ on:
     branches:
       - master
     paths:
+      - "www/**"
       - "app/**"
       - "deploy/Dockerfile"
       - ".github/workflows/docker-build.yml"
