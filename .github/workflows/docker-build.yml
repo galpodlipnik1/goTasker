@@ -74,13 +74,14 @@ jobs:
           GIT_HUB_TOKEN: ${{ secrets.GIT_HUB_TOKEN }}
         run: |
           # Download and install tsh
-          curl -s https://api.github.com/repos/gravitational/teleport/releases/latest | \
-            grep "browser_download_url.*linux-x86_64-bin.tar.gz" | \
-            cut -d '"' -f 4 | \
-            xargs curl -L -o teleport.tar.gz
+          cd /tmp
+          curl -s https://api.github.com/repos/gravitational/teleport/releases/latest > releases.json
+          DOWNLOAD_URL=$(grep -o '"browser_download_url": "[^"]*linux-x86_64-bin.tar.gz"' releases.json | head -1 | cut -d'"' -f4)
+          curl -L -o teleport.tar.gz "$DOWNLOAD_URL"
           tar xzf teleport.tar.gz
           sudo mv teleport/tsh /usr/local/bin/
-          rm -rf teleport.tar.gz teleport/
+          rm -rf teleport.tar.gz teleport/ releases.json
+          cd -
 
           # Login to Teleport
           echo "$TELEPORT_PASSWORD" | tsh login --proxy=devops.lrk.si --user=aradovan --password-file=/dev/stdin
