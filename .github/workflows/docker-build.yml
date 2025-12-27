@@ -75,12 +75,10 @@ jobs:
         run: |
           # Download and install tsh
           cd /tmp
-          curl -s https://api.github.com/repos/gravitational/teleport/releases/latest > releases.json
-          DOWNLOAD_URL=$(grep -o '"browser_download_url": "[^"]*linux-x86_64-bin.tar.gz"' releases.json | head -1 | cut -d'"' -f4)
-          curl -L -o teleport.tar.gz "$DOWNLOAD_URL"
+          curl -L -o teleport.tar.gz https://api.github.com/repos/gravitational/teleport/tarball/v18.6.1
           tar xzf teleport.tar.gz
-          sudo mv teleport/tsh /usr/local/bin/
-          rm -rf teleport.tar.gz teleport/ releases.json
+          sudo mv gravitational-teleport-*/build/tsh /usr/local/bin/
+          rm -rf teleport.tar.gz gravitational-teleport-*
           cd -
 
           # Login to Teleport
