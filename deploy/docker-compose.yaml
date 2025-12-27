@@ -1,11 +1,42 @@
 services:
-  app:
-    build:
-      context: ../
-      dockerfile: deploy/Dockerfile
-    container_name: gotasker-app
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      # Let's Encrypt
+      - "--certificatesresolvers.le.acme.email=radovan.aljaz@gmail.com"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+
+      # Staging
+      - "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+
+      # Redirect HTTP → HTTPS
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+      # Dashboard
+      - "--api.dashboard=true"
+
     ports:
-      - "8081:8081"
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+
+    networks:
+      - gotasker-network
+  app:
+    image: ghcr.io/galpodlipnik1/gotasker:latest
     environment:
       - APP_ADDR=:8081
       - SQLITE_PATH=/var/lib/gotasker/tasks.db
@@ -13,6 +44,15 @@ services:
       - LOG_LEVEL=info
     volumes:
       - gotasker_data:/var/lib/gotasker
+    labels:
+      - "traefik.enable=true"
+
+      - "traefik.http.routers.gotasker.rule=Host(`devops.radovan.si`)"
+      - "traefik.http.routers.gotasker.entrypoints=websecure"
+      - "traefik.http.routers.gotasker.tls.certresolver=le"
+
+      #- "traefik.http.services.gotasker.loadbalancer.server.port=8081"
+
     depends_on:
       - redis
     networks:
@@ -28,20 +68,20 @@ services:
       - gotasker-network
     restart: unless-stopped
 
-  nginx:
-    image: nginx:alpine
-    container_name: gotasker-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/docker-default:/etc/nginx/conf.d/default.conf:ro
-      - ./www:/usr/share/nginx/html:ro
-    depends_on:
-      - app
-    networks:
-      - gotasker-network
-    restart: unless-stopped
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: gotasker-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/docker-default:/etc/nginx/conf.d/default.conf:ro
+  #     - ./www:/usr/share/nginx/html:ro
+  #   depends_on:
+  #     - app
+  #   networks:
+  #     - gotasker-network
+  #   restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
