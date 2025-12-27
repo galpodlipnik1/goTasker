@@ -5,8 +5,7 @@ services:
     restart: unless-stopped
     command:
       - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=gotasker-network"
+      - "--providers.docker.exposedbydefault=true"
 
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
@@ -14,6 +13,7 @@ services:
       # Let's Encrypt
       - "--certificatesresolvers.le.acme.email=radovan.aljaz@gmail.com"
       - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
       - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
 
       # Staging
@@ -31,7 +31,7 @@ services:
       - "443:443"
 
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
       - traefik_letsencrypt:/letsencrypt
 
     networks:
@@ -72,12 +72,11 @@ services:
       - gotasker-network
     labels:
       - "traefik.enable=true"
-
+      - "traefik.port=80"
       - "traefik.http.routers.gotasker.rule=Host(`devops.radovan.si`)"
       - "traefik.http.routers.gotasker.entrypoints=websecure"
       - "traefik.http.routers.gotasker.tls=true"
       - "traefik.http.routers.gotasker.tls.certresolver=le"
-      - "traefik.http.services.gotasker.loadbalancer.server.port=80"
 
     restart: unless-stopped
 
