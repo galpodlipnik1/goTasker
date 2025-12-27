@@ -68,20 +68,20 @@ services:
       - gotasker-network
     restart: unless-stopped
 
-  # nginx:
-  #   image: nginx:alpine
-  #   container_name: gotasker-nginx
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./nginx/docker-default:/etc/nginx/conf.d/default.conf:ro
-  #     - ./www:/usr/share/nginx/html:ro
-  #   depends_on:
-  #     - app
-  #   networks:
-  #     - gotasker-network
-  #   restart: unless-stopped
+  nginx:
+    image: nginx:alpine
+    container_name: gotasker-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/docker-default:/etc/nginx/conf.d/default.conf:ro
+      - ./www:/usr/share/nginx/html:ro
+    depends_on:
+      - app
+    networks:
+      - gotasker-network
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
