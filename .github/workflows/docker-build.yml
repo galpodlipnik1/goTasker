@@ -9,6 +9,8 @@ on:
       - "app/**"
       - "deploy/Dockerfile"
       - ".github/workflows/docker-build.yml"
+    tags:
+      - "v*"
   pull_request:
     branches:
       - master
