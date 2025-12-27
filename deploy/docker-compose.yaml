@@ -1,41 +1,28 @@
 services:
-  # traefik:
-  #   image: traefik:v3.0
-  #   container_name: traefik
-  #   restart: unless-stopped
-  #   command:
-  #     - "--providers.docker=true"
-  #     - "--providers.docker.exposedbydefault=false"
+  traefik:
+    image: traefik:v2.11
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.email=radovan.aljaz@gmail.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--api=true"
+      - "--api.dashboard=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - traefik_letsencrypt:/letsencrypt
+    networks:
+      - gotasker-network
 
-  #     - "--entrypoints.web.address=:80"
-  #     - "--entrypoints.websecure.address=:443"
-
-  #     # Let's Encrypt
-  #     - "--certificatesresolvers.le.acme.email=radovan.aljaz@gmail.com"
-  #     - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
-  #     - "--certificatesresolvers.le.acme.httpchallenge=true"
-  #     - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
-
-  #     # Staging
-  #     - "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
-
-  #     # Redirect HTTP → HTTPS
-  #     # - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-  #     # - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-
-  #     - "--api=true"
-  #     - "--api.dashboard=true"
-
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #     - traefik_letsencrypt:/letsencrypt
-
-  #   networks:
-  #     - gotasker-network
   app:
     image: ghcr.io/galpodlipnik1/gotasker:latest
     environment:
@@ -70,16 +57,19 @@ services:
       - app
     networks:
       - gotasker-network
-    ports:
-      - "80:80"
-    # labels:
-    #   - "traefik.enable=true"
-    #   - "traefik.http.services.gotasker.loadbalancer.server.port=80"
-    #   - "traefik.http.routers.gotasker.rule=Host(`devops.radovan.si`)"
-    #   - "traefik.http.routers.gotasker.entrypoints=websecure"
-    #   - "traefik.http.routers.gotasker.tls=true"
-    #   - "traefik.http.routers.gotasker.tls.certresolver=le"
-
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gotasker.rule=Host(`devops.radovan.si`)"
+      - "traefik.http.routers.gotasker.entrypoints=web,websecure"
+      - "traefik.http.routers.gotasker.service=nginx"
+      - "traefik.http.routers.gotasker.tls=true"
+      - "traefik.http.routers.gotasker.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.gotasker-http.rule=Host(`devops.radovan.si`)"
+      - "traefik.http.routers.gotasker-http.entrypoints=web"
+      - "traefik.http.routers.gotasker-http.middlewares=redirect-https"
+      - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-https.redirectscheme.permanent=true"
+      - "traefik.http.services.nginx.loadbalancer.server.port=80"
     restart: unless-stopped
 
   prometheus:
