@@ -1,8 +1,5 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
-
-# Install build dependencies (gcc, musl-dev for CGO)
-RUN apk add --no-cache gcc musl-dev
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
 
 WORKDIR /build
 
@@ -17,7 +14,8 @@ COPY app/ .
 
 # Build the application
 ARG TARGETARCH
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -o gotasker .
+ARG TARGETOS
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o gotasker .
 
 
 
