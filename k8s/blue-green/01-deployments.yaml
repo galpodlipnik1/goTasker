@@ -49,3 +49,11 @@ spec:
         image: ghcr.io/galpodlipnik1/gotasker-frontend:latest
         ports:
         - containerPort: 80
+        volumeMounts:
+        - name: html-volume
+          mountPath: /usr/share/nginx/html/index.html
+          subPath: index.html
+      volumes:
+      - name: html-volume
+        configMap:
+          name: green-index

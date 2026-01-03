@@ -199,7 +199,7 @@ This section describes how to deploy the application stack to a Kubernetes clust
 - **Frontend**: Nginx serving static files, scaled to 3 replicas for HA.
 - **Backend**: GoTasker API (1 replica, using SQLite).
 - **Redis**: Redis instance (1 replica).
-- **Ingress**: Exposes the application via `devops.radovan.si` with TLS.
+- **Ingress**: Exposes the application via `localhost` (HTTP for local dev).
 
 ### Deployment Steps
 
@@ -221,8 +221,7 @@ This section describes how to deploy the application stack to a Kubernetes clust
     ```
 
 4.  **Access Application**:
-    Add `devops.radovan.si` to your `/etc/hosts` pointing to your Ingress Controller IP.
-    Open `https://devops.radovan.si` in your browser.
+    Open `http://localhost` in your browser.
 
 ### CI/CD
 
@@ -238,20 +237,37 @@ A GitHub Actions workflow is provided in `.github/workflows/ci.yaml`. It automat
 
 ### Blue/Green Deployment
 
+### Blue/Green Deployment Demo
+
 Manifests for Blue/Green deployment are in `k8s/blue-green/`.
 
-1.  **Deploy Blue Version**:
+1.  **Setup**:
+    Apply the ConfigMap, Deployments, Service, and Ingress:
     ```bash
-    kubectl apply -f k8s/blue-green/01-deployments.yaml
-    kubectl apply -f k8s/blue-green/02-service.yaml
+    kubectl apply -f k8s/blue-green/
     ```
-    Service points to `version: blue`.
+    This deploys both Blue (standard) and Green (modified UI) versions, but the Service points to **Blue**.
 
-2.  **Switch to Green**:
-    Edit `k8s/blue-green/02-service.yaml` and change selector to `version: green`.
+2.  **Access**:
+    Open `http://bluegreen.localhost` in your browser. You should see the standard UI.
+
+3.  **Start Load Test**:
+    Open a PowerShell terminal and run the provided script to monitor availability:
+    ```powershell
+    ./test-downtime.ps1
+    ```
+    You should see a stream of `Status: 200`.
+
+4.  **Perform Switch (Blue -> Green)**:
+    Edit `k8s/blue-green/02-service.yaml` and change the selector to `version: green`.
+    Apply the change:
     ```bash
     kubectl apply -f k8s/blue-green/02-service.yaml
     ```
+
+5.  **Verify**:
+    - Check the PowerShell script: You should see **NO** failed requests (Status 200 continues uninterrupted).
+    - Refresh your browser: You should now see the **Green Version** (Light green background).
 
 ### Probes
 
@@ -305,4 +321,69 @@ If you want to run this locally using `kind`, follow these steps:
 
 6.  **Access**:
     Add `127.0.0.1 devops.radovan.si` to your hosts file.
-    Access at `https://devops.radovan.si`.
+    Access at `http://localhost
+## Extra Credit: Helm Chart Deployment
+
+I have also created a Helm chart to simplify the deployment and management of the application, including the Blue/Green demo.
+
+### Prerequisites
+- Helm installed (`choco install kubernetes-helm` on Windows)
+
+### Deploying with Helm
+
+1.  **Install the Chart**:
+    ```bash
+    helm install gotasker ./helm/gotasker
+    ```
+    This deploys the standard application stack (Backend, Frontend, Redis, Ingress).
+
+2.  **Access**:
+    Open `http://localhost`.
+
+### Blue/Green Demo with Helm
+
+1.  **Enable Blue/Green Mode**:
+    Upgrade the release with the `blueGreen.enabled` flag:
+    ```bash
+    helm upgrade gotasker ./helm/gotasker --set blueGreen.enabled=true
+    ```
+
+2.  **Access**:
+    Open `http://bluegreen.localhost`. You should see the **Blue** version.
+
+3.  **Switch to Green**:
+    Run the upgrade command changing the `activeVersion`:
+    ```bash
+    helm upgrade gotasker ./helm/gotasker --set blueGreen.enabled=true --set blueGreen.activeVersion=green
+    ```
+    Refresh your browser to see the **Green** version.
+
+4.  **Uninstall**:
+    ```bash
+    helm uninstall gotasker
+    ```
+
+## VPS Deployment (CI/CD)
+
+The project is configured to automatically deploy to a VPS on every push to the `master` branch.
+
+### Prerequisites on VPS
+1.  **K3s Installed**: `curl -sfL https://get.k3s.io | sh -`
+2.  **Cert-Manager Installed**: For automatic TLS certificates.
+3.  **DNS Configured**: `devops-kube.radovan.si` pointing to VPS IP.
+
+### GitHub Secrets Setup
+To enable the automatic deployment, you must add the following Secret to your GitHub Repository:
+
+*   **Name**: `KUBECONFIG`
+*   **Value**: The content of `/etc/rancher/k3s/k3s.yaml` from your VPS.
+    *   *Important*: Replace `127.0.0.1` or `localhost` in the file with your VPS Public IP address.
+
+### How it works
+1.  **Build**: GitHub Actions builds the Docker images and tags them with the commit SHA (e.g., `sha-a1b2c3d`).
+2.  **Deploy**: It connects to your VPS using the `KUBECONFIG` secret.
+3.  **Helm Upgrade**: It runs `helm upgrade --install` setting:
+    *   Domain: `devops-kube.radovan.si`
+    *   TLS: `true`
+    *   Ingress Class: `traefik` (Default for K3s)
+    *   Image Tag: `sha-a1b2c3d` (Ensuring the exact version you just built is deployed).

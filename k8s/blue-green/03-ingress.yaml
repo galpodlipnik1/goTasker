@@ -1,25 +1,20 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: gotasker-ingress
+  name: blue-green-ingress
   namespace: gotasker
   annotations:
-    # cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
-  # tls:
-  # - hosts:
-  #   - devops.radovan.si
-  #   secretName: gotasker-tls
   rules:
-  - host: localhost
+  - host: bluegreen.localhost
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: frontend
+            name: frontend-bg
             port:
               number: 80

@@ -6,7 +6,7 @@ metadata:
 spec:
   selector:
     app: frontend-bg
-    version: blue
+    version: green
   ports:
     - protocol: TCP
       port: 80

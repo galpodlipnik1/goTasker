@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: green-index
+  namespace: gotasker
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>GoTasker - GREEN VERSION</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #e0ffe0; /* Light Green Background */
+            color: #222;
+          }
+          h1 { text-align: center; color: #006400; }
+          #task-form { display: flex; gap: 10px; margin-bottom: 20px; }
+          input[type="text"] { flex: 1; padding: 10px; font-size: 16px; }
+          button { padding: 10px 16px; font-size: 16px; cursor: pointer; border: none; background: #006400; color: white; border-radius: 4px; }
+          button:hover { background: #004d00; }
+          .task { padding: 12px; margin: 8px 0; background: white; border: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; }
+          .task.completed span { text-decoration: line-through; color: #888; }
+          .delete-btn { background: #cc0000; margin-left: 10px; }
+          .delete-btn:hover { background: #990000; }
+          .stats { margin-top: 20px; padding: 15px; background: #fff; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em; }
+          .stats div { margin-bottom: 5px; }
+          .controls { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+          .secondary-btn { background: #666; }
+          .secondary-btn:hover { background: #444; }
+        </style>
+      </head>
+      <body>
+        <h1>GoTasker - GREEN VERSION</h1>
+        <div class="controls">
+            <button onclick="generateTasks()" class="secondary-btn">Generate 1000 Tasks</button>
+            <button onclick="clearTasks()" class="delete-btn">Clear All Tasks</button>
+        </div>
+        <div id="task-form">
+          <input type="text" id="task-input" placeholder="Add a new task..." />
+          <button onclick="addTask()">Add</button>
+        </div>
+        <div id="task-list"></div>
+        <div class="stats">
+            <div><strong>Cache Status:</strong> <span id="cache-status">-</span></div>
+            <div><strong>Request Latency:</strong> <span id="latency">-</span></div>
+        </div>
+        <script>
+          // Minimal script to make it functional for the demo
+          const API_URL = "/api/tasks";
+          async function fetchTasks() {
+            const start = performance.now();
+            try {
+                const res = await fetch(API_URL + "/");
+                const data = await res.json();
+                const latency = (performance.now() - start).toFixed(2);
+                document.getElementById("latency").innerText = latency + " ms";
+                document.getElementById("cache-status").innerText = res.headers.get("X-Cache") || "MISS";
+                renderTasks(data);
+            } catch (e) { console.error(e); }
+          }
+          function renderTasks(tasks) {
+            const list = document.getElementById("task-list");
+            list.innerHTML = "";
+            if(!tasks) return;
+            tasks.forEach(t => {
+                const div = document.createElement("div");
+                div.className = "task " + (t.completed ? "completed" : "");
+                div.innerHTML = `<span>${t.title}</span>`;
+                list.appendChild(div);
+            });
+          }
+          fetchTasks();
+        </script>
+      </body>
+    </html>

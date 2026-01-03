@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: frontend
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.frontend.rollingUpdate.maxUnavailable }}
+      maxSurge: {{ .Values.frontend.rollingUpdate.maxSurge }}
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: nginx
+        image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+        imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.frontend.service.port }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: {{ .Values.frontend.service.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: {{ .Values.frontend.service.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector:
+    app: frontend
+  ports:
+    - protocol: TCP
+      port: {{ .Values.frontend.service.port }}
+      targetPort: {{ .Values.frontend.service.port }}
