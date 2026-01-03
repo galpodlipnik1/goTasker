@@ -182,3 +182,127 @@ The project utilizes GitHub Actions (`.github/workflows/docker-build.yml`) for C
 |
 └── README.md
 ```
+
+## Part 3: Kubernetes Deployment
+
+This section describes how to deploy the application stack to a Kubernetes cluster.
+
+### Prerequisites
+
+- Kubernetes cluster (e.g., Minikube, Kind, GKE, EKS, AKS)
+- `kubectl` configured
+- Nginx Ingress Controller installed
+- cert-manager installed (for TLS)
+
+### Architecture on Kubernetes
+
+- **Frontend**: Nginx serving static files, scaled to 3 replicas for HA.
+- **Backend**: GoTasker API (1 replica, using SQLite).
+- **Redis**: Redis instance (1 replica).
+- **Ingress**: Exposes the application via `devops.radovan.si` with TLS.
+
+### Deployment Steps
+
+1.  **Create Namespace**:
+    ```bash
+    kubectl apply -f k8s/00-namespace.yaml
+    ```
+
+2.  **Apply Manifests**:
+    ```bash
+    kubectl apply -f k8s/
+    ```
+    *Note: This will apply all manifests in the `k8s` directory.*
+
+3.  **Verify Deployment**:
+    ```bash
+    kubectl get pods -n gotasker
+    kubectl get ingress -n gotasker
+    ```
+
+4.  **Access Application**:
+    Add `devops.radovan.si` to your `/etc/hosts` pointing to your Ingress Controller IP.
+    Open `https://devops.radovan.si` in your browser.
+
+### CI/CD
+
+A GitHub Actions workflow is provided in `.github/workflows/ci.yaml`. It automatically builds and pushes the Docker images to GitHub Container Registry (GHCR) on push to `main`.
+
+### High Availability & Rolling Updates
+
+- **Frontend**: Configured with 3 replicas.
+- **Rolling Update**:
+    - Strategy: `maxUnavailable: 0`, `maxSurge: 1`.
+    - This ensures zero downtime during updates.
+    - To demo: Update the image tag in `k8s/04-frontend.yaml` and apply. Watch pods with `kubectl get pods -n gotasker -w`.
+
+### Blue/Green Deployment
+
+Manifests for Blue/Green deployment are in `k8s/blue-green/`.
+
+1.  **Deploy Blue Version**:
+    ```bash
+    kubectl apply -f k8s/blue-green/01-deployments.yaml
+    kubectl apply -f k8s/blue-green/02-service.yaml
+    ```
+    Service points to `version: blue`.
+
+2.  **Switch to Green**:
+    Edit `k8s/blue-green/02-service.yaml` and change selector to `version: green`.
+    ```bash
+    kubectl apply -f k8s/blue-green/02-service.yaml
+    ```
+
+### Probes
+
+- **Liveness**: Checks if the container is running.
+    - Backend: `/healthz`
+    - Frontend: `/`
+- **Readiness**: Checks if the application is ready to serve traffic (DB/Redis connected).
+    - Backend: `/readyz`
+    - Frontend: `/`
+
+### Running with Kind (Kubernetes in Docker)
+
+If you want to run this locally using `kind`, follow these steps:
+
+1.  **Create Cluster**:
+    Use the provided config to map ports 80 and 443 to your host.
+    ```bash
+    kind create cluster --config deploy/kind-config.yaml --name gotasker
+    ```
+
+2.  **Install Nginx Ingress Controller**:
+    ```bash
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+    ```
+    Wait for the ingress controller to be ready:
+    ```bash
+    kubectl wait --namespace ingress-nginx \
+      --for=condition=ready pod \
+      --selector=app.kubernetes.io/component=controller \
+      --timeout=90s
+    ```
+
+3.  **Install Cert Manager** (Optional, for self-signed certs):
+    ```bash
+    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+    ```
+
+4.  **Build and Load Images** (If not using GHCR):
+    ```bash
+    # Build images
+    docker build -t ghcr.io/galpodlipnik1/gotasker:latest -f deploy/Dockerfile .
+    docker build -t ghcr.io/galpodlipnik1/gotasker-frontend:latest -f deploy/nginx/Dockerfile .
+
+    # Load into Kind
+    kind load docker-image ghcr.io/galpodlipnik1/gotasker:latest --name gotasker
+    kind load docker-image ghcr.io/galpodlipnik1/gotasker-frontend:latest --name gotasker
+    ```
+
+5.  **Deploy Application**:
+    Follow the [Deployment Steps](#deployment-steps) above.
+
+6.  **Access**:
+    Add `127.0.0.1 devops.radovan.si` to your hosts file.
+    Access at `https://devops.radovan.si`.

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gotasker
+  namespace: gotasker
+  labels:
+    app: gotasker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: gotasker
+  template:
+    metadata:
+      labels:
+        app: gotasker
+    spec:
+      containers:
+      - name: gotasker
+        image: ghcr.io/galpodlipnik1/gotasker:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081
+        env:
+        - name: APP_ADDR
+          value: ":8081"
+        - name: SQLITE_PATH
+          value: "/var/lib/gotasker/tasks.db"
+        - name: REDIS_ADDR
+          value: "redis:6379"
+        - name: LOG_LEVEL
+          value: "info"
+        volumeMounts:
+        - name: gotasker-data
+          mountPath: /var/lib/gotasker
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: gotasker-data
+        persistentVolumeClaim:
+          claimName: gotasker-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gotasker
+  namespace: gotasker
+spec:
+  selector:
+    app: gotasker
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 8081

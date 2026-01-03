@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-blue
+  namespace: gotasker
+  labels:
+    app: frontend-bg
+    version: blue
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: frontend-bg
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: frontend-bg
+        version: blue
+    spec:
+      containers:
+      - name: nginx
+        image: ghcr.io/galpodlipnik1/gotasker-frontend:latest
+        ports:
+        - containerPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-green
+  namespace: gotasker
+  labels:
+    app: frontend-bg
+    version: green
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: frontend-bg
+      version: green
+  template:
+    metadata:
+      labels:
+        app: frontend-bg
+        version: green
+    spec:
+      containers:
+      - name: nginx
+        image: ghcr.io/galpodlipnik1/gotasker-frontend:latest
+        ports:
+        - containerPort: 80

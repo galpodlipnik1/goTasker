@@ -128,6 +128,7 @@ func main() {
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	r.GET("/healthz", app.handleHealth)
+	r.GET("/readyz", app.handleReady)
 	api := r.Group("/api/tasks")
 	{
 		api.GET("/", app.handleListTasks)
@@ -184,6 +185,22 @@ func prometheusMiddleware() gin.HandlerFunc {
 
 func (a *App) handleHealth(c *gin.Context) {
 	c.String(http.StatusOK, "ok")
+}
+
+func (a *App) handleReady(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	if err := a.Redis.Ping(ctx).Err(); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "redis not ready"})
+		return
+	}
+
+	if err := a.DB.Ping(); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "database not ready"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 func (a *App) handleListTasks(c *gin.Context) {
