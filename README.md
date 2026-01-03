@@ -202,6 +202,23 @@ This section describes how to deploy the application stack to a Kubernetes clust
 - **Redis**: Redis instance (1 replica).
 - **Ingress**: Exposes the application via HTTP/HTTPS.
 
+### Probes Configuration
+
+The application uses Kubernetes Liveness and Readiness probes to ensure high availability and self-healing.
+
+**Backend (`gotasker`):**
+*   **Liveness Probe** (`/healthz`): Checks if the Go application process is running.
+    *   *Initial Delay*: `5s` (Allows application startup time).
+    *   *Period*: `10s` (Frequent enough to detect crashes quickly without overloading).
+*   **Readiness Probe** (`/readyz`): Checks if the application is ready to accept traffic (e.g., database connection established).
+    *   *Initial Delay*: `5s`.
+    *   *Period*: `10s`.
+
+**Frontend (`nginx`):**
+*   **Liveness/Readiness Probe** (`/`): Checks if Nginx is successfully serving the root index page.
+    *   *Initial Delay*: `5s`.
+    *   *Period*: `10s`.
+
 ---
 
 ### Option 1: Deployment with Helm (Recommended)
