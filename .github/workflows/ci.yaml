@@ -100,7 +100,7 @@ jobs:
           
           helm upgrade --install gotasker ./helm/gotasker \
             --namespace gotasker \
-            --set ingress.host=devops-kube.radovan.si \
+            --set ingress.host=devops-kube.galpodlipnik.com \
             --set ingress.tls=true \
             --set ingress.className=traefik \
             --set backend.image.tag=sha-${SHORT_SHA} \

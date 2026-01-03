@@ -370,7 +370,7 @@ The project is configured to automatically deploy to a VPS on every push to the 
 ### Prerequisites on VPS
 1.  **K3s Installed**: `curl -sfL https://get.k3s.io | sh -`
 2.  **Cert-Manager Installed**: For automatic TLS certificates.
-3.  **DNS Configured**: `devops-kube.radovan.si` pointing to VPS IP.
+3.  **DNS Configured**: `devops-kube.galpodlipnik.com` pointing to VPS IP.
 
 ### GitHub Secrets Setup
 To enable the automatic deployment, you must add the following Secret to your GitHub Repository:
@@ -383,7 +383,7 @@ To enable the automatic deployment, you must add the following Secret to your Gi
 1.  **Build**: GitHub Actions builds the Docker images and tags them with the commit SHA (e.g., `sha-a1b2c3d`).
 2.  **Deploy**: It connects to your VPS using the `KUBECONFIG` secret.
 3.  **Helm Upgrade**: It runs `helm upgrade --install` setting:
-    *   Domain: `devops-kube.radovan.si`
+    *   Domain: `devops-kube.galpodlipnik.com`
     *   TLS: `true`
     *   Ingress Class: `traefik` (Default for K3s)
     *   Image Tag: `sha-a1b2c3d` (Ensuring the exact version you just built is deployed).
