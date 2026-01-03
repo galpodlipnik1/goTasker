@@ -1,4 +1,4 @@
-$url = "http://bluegreen.localhost"
+$url = "https://devops-kube.galpodlipnik.com"
 $i = 0
 
 Write-Host "Starting Zero-Downtime Test on $url..."

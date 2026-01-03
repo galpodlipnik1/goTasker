@@ -185,205 +185,112 @@ The project utilizes GitHub Actions (`.github/workflows/docker-build.yml`) for C
 
 ## Part 3: Kubernetes Deployment
 
-This section describes how to deploy the application stack to a Kubernetes cluster.
+This section describes how to deploy the application stack to a Kubernetes cluster. The project supports both manual deployment via raw manifests and automated deployment via **Helm Charts**.
 
 ### Prerequisites
 
-- Kubernetes cluster (e.g., Minikube, Kind, GKE, EKS, AKS)
+- Kubernetes cluster (e.g., Kind, K3s, Minikube)
 - `kubectl` configured
-- Nginx Ingress Controller installed
-- cert-manager installed (for TLS)
+- `helm` installed
+- Ingress Controller (Nginx for Kind, Traefik for K3s)
+- cert-manager (for TLS)
 
-### Architecture on Kubernetes
+### Architecture
 
-- **Frontend**: Nginx serving static files, scaled to 3 replicas for HA.
+- **Frontend**: Nginx serving static files (3 replicas for HA).
 - **Backend**: GoTasker API (1 replica, using SQLite).
 - **Redis**: Redis instance (1 replica).
-- **Ingress**: Exposes the application via `localhost` (HTTP for local dev).
+- **Ingress**: Exposes the application via HTTP/HTTPS.
 
-### Deployment Steps
+---
 
-1.  **Create Namespace**:
+### Option 1: Deployment with Helm (Recommended)
+
+I have created a custom Helm chart in `./helm/gotasker` to simplify deployment and management.
+
+#### 1. Local Development (Kind)
+
+**Setup Cluster:**
+```bash
+kind create cluster --config deploy/kind-config.yaml --name gotasker
+# Install Nginx Ingress
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+```
+
+**Install App:**
+```bash
+helm install gotasker ./helm/gotasker
+```
+Access the app at **[http://localhost](http://localhost)**.
+
+![Helm Deployment](/images/deploy-kube.png)
+
+#### 2. Blue/Green Deployment Demo
+
+<video src="images/greenblue.mp4" controls="controls" style="max-width: 730px;">
+</video>
+
+The Helm chart includes built-in support for Blue/Green deployments.
+
+**Enable Blue/Green Mode:**
+This deploys a second "Green" version alongside the "Blue" version.
+```bash
+helm upgrade gotasker ./helm/gotasker --set blueGreen.enabled=true
+```
+Access the Blue version at **[http://bluegreen.localhost](http://bluegreen.localhost)**.
+
+**Switch Traffic to Green:**
+Perform a zero-downtime switch to the Green version.
+```bash
+helm upgrade gotasker ./helm/gotasker --set blueGreen.enabled=true --set blueGreen.activeVersion=green
+```
+Refresh your browser to see the Green version.
+
+**Verify Zero Downtime:**
+Use the provided PowerShell script to monitor availability during the switch:
+```powershell
+./test-downtime.ps1
+```
+
+---
+
+### Option 2: Manual Deployment (Raw Manifests)
+
+If you prefer using raw Kubernetes manifests, they are located in the `k8s/` directory.
+
+1.  **Apply Manifests**:
     ```bash
     kubectl apply -f k8s/00-namespace.yaml
-    ```
-
-2.  **Apply Manifests**:
-    ```bash
     kubectl apply -f k8s/
     ```
-    *Note: This will apply all manifests in the `k8s` directory.*
+2.  **Blue/Green Manual Switch**:
+    *   Deploy: `kubectl apply -f k8s/blue-green/`
+    *   Switch: Edit `k8s/blue-green/02-service.yaml` and change selector to `version: green`, then apply.
 
-3.  **Verify Deployment**:
-    ```bash
-    kubectl get pods -n gotasker
-    kubectl get ingress -n gotasker
-    ```
+---
 
-4.  **Access Application**:
-    Open `http://localhost` in your browser.
+### Production Deployment (VPS & CI/CD)
 
-### CI/CD
+The project is configured with a **GitHub Actions** pipeline that automatically deploys changes to a production VPS.
 
-A GitHub Actions workflow is provided in `.github/workflows/ci.yaml`. It automatically builds and pushes the Docker images to GitHub Container Registry (GHCR) on push to `main`.
+#### Infrastructure
+- **Server**: VPS running **K3s** (Lightweight Kubernetes).
+- **Domain**: `devops-kube.galpodlipnik.com`
+- **Security**: Automatic TLS certificates via **cert-manager** and Let's Encrypt.
 
-### High Availability & Rolling Updates
+#### CI/CD Workflow (`.github/workflows/ci.yaml`)
+1.  **Build**: On every push to `master`, Docker images are built and tagged with the commit SHA.
+2.  **Push**: Images are pushed to GitHub Container Registry (GHCR).
+3.  **Deploy**: The workflow connects to the VPS and performs a **Helm Upgrade**:
+    *   Updates the image tag to the specific commit SHA.
+    *   Ensures zero-downtime rolling updates.
 
-- **Frontend**: Configured with 3 replicas.
-- **Rolling Update**:
-    - Strategy: `maxUnavailable: 0`, `maxSurge: 1`.
-    - This ensures zero downtime during updates.
-    - To demo: Update the image tag in `k8s/04-frontend.yaml` and apply. Watch pods with `kubectl get pods -n gotasker -w`.
+![Build and Push](/images/build-and-push-kube.png)
 
-### Blue/Green Deployment
+#### Setup Instructions for VPS
+To replicate this setup:
+1.  Install K3s: `curl -sfL https://get.k3s.io | sh -`
+2.  Add `KUBECONFIG` secret to GitHub (content of `/etc/rancher/k3s/k3s.yaml` with public IP).
+3.  Configure DNS A record for your domain.
 
-### Blue/Green Deployment Demo
-
-Manifests for Blue/Green deployment are in `k8s/blue-green/`.
-
-1.  **Setup**:
-    Apply the ConfigMap, Deployments, Service, and Ingress:
-    ```bash
-    kubectl apply -f k8s/blue-green/
-    ```
-    This deploys both Blue (standard) and Green (modified UI) versions, but the Service points to **Blue**.
-
-2.  **Access**:
-    Open `http://bluegreen.localhost` in your browser. You should see the standard UI.
-
-3.  **Start Load Test**:
-    Open a PowerShell terminal and run the provided script to monitor availability:
-    ```powershell
-    ./test-downtime.ps1
-    ```
-    You should see a stream of `Status: 200`.
-
-4.  **Perform Switch (Blue -> Green)**:
-    Edit `k8s/blue-green/02-service.yaml` and change the selector to `version: green`.
-    Apply the change:
-    ```bash
-    kubectl apply -f k8s/blue-green/02-service.yaml
-    ```
-
-5.  **Verify**:
-    - Check the PowerShell script: You should see **NO** failed requests (Status 200 continues uninterrupted).
-    - Refresh your browser: You should now see the **Green Version** (Light green background).
-
-### Probes
-
-- **Liveness**: Checks if the container is running.
-    - Backend: `/healthz`
-    - Frontend: `/`
-- **Readiness**: Checks if the application is ready to serve traffic (DB/Redis connected).
-    - Backend: `/readyz`
-    - Frontend: `/`
-
-### Running with Kind (Kubernetes in Docker)
-
-If you want to run this locally using `kind`, follow these steps:
-
-1.  **Create Cluster**:
-    Use the provided config to map ports 80 and 443 to your host.
-    ```bash
-    kind create cluster --config deploy/kind-config.yaml --name gotasker
-    ```
-
-2.  **Install Nginx Ingress Controller**:
-    ```bash
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-    ```
-    Wait for the ingress controller to be ready:
-    ```bash
-    kubectl wait --namespace ingress-nginx \
-      --for=condition=ready pod \
-      --selector=app.kubernetes.io/component=controller \
-      --timeout=90s
-    ```
-
-3.  **Install Cert Manager** (Optional, for self-signed certs):
-    ```bash
-    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
-    ```
-
-4.  **Build and Load Images** (If not using GHCR):
-    ```bash
-    # Build images
-    docker build -t ghcr.io/galpodlipnik1/gotasker:latest -f deploy/Dockerfile .
-    docker build -t ghcr.io/galpodlipnik1/gotasker-frontend:latest -f deploy/nginx/Dockerfile .
-
-    # Load into Kind
-    kind load docker-image ghcr.io/galpodlipnik1/gotasker:latest --name gotasker
-    kind load docker-image ghcr.io/galpodlipnik1/gotasker-frontend:latest --name gotasker
-    ```
-
-5.  **Deploy Application**:
-    Follow the [Deployment Steps](#deployment-steps) above.
-
-6.  **Access**:
-    Add `127.0.0.1 devops.radovan.si` to your hosts file.
-    Access at `http://localhost
-## Extra Credit: Helm Chart Deployment
-
-I have also created a Helm chart to simplify the deployment and management of the application, including the Blue/Green demo.
-
-### Prerequisites
-- Helm installed (`choco install kubernetes-helm` on Windows)
-
-### Deploying with Helm
-
-1.  **Install the Chart**:
-    ```bash
-    helm install gotasker ./helm/gotasker
-    ```
-    This deploys the standard application stack (Backend, Frontend, Redis, Ingress).
-
-2.  **Access**:
-    Open `http://localhost`.
-
-### Blue/Green Demo with Helm
-
-1.  **Enable Blue/Green Mode**:
-    Upgrade the release with the `blueGreen.enabled` flag:
-    ```bash
-    helm upgrade gotasker ./helm/gotasker --set blueGreen.enabled=true
-    ```
-
-2.  **Access**:
-    Open `http://bluegreen.localhost`. You should see the **Blue** version.
-
-3.  **Switch to Green**:
-    Run the upgrade command changing the `activeVersion`:
-    ```bash
-    helm upgrade gotasker ./helm/gotasker --set blueGreen.enabled=true --set blueGreen.activeVersion=green
-    ```
-    Refresh your browser to see the **Green** version.
-
-4.  **Uninstall**:
-    ```bash
-    helm uninstall gotasker
-    ```
-
-## VPS Deployment (CI/CD)
-
-The project is configured to automatically deploy to a VPS on every push to the `master` branch.
-
-### Prerequisites on VPS
-1.  **K3s Installed**: `curl -sfL https://get.k3s.io | sh -`
-2.  **Cert-Manager Installed**: For automatic TLS certificates.
-3.  **DNS Configured**: `devops-kube.galpodlipnik.com` pointing to VPS IP.
-
-### GitHub Secrets Setup
-To enable the automatic deployment, you must add the following Secret to your GitHub Repository:
-
-*   **Name**: `KUBECONFIG`
-*   **Value**: The content of `/etc/rancher/k3s/k3s.yaml` from your VPS.
-    *   *Important*: Replace `127.0.0.1` or `localhost` in the file with your VPS Public IP address.
-
-### How it works
-1.  **Build**: GitHub Actions builds the Docker images and tags them with the commit SHA (e.g., `sha-a1b2c3d`).
-2.  **Deploy**: It connects to your VPS using the `KUBECONFIG` secret.
-3.  **Helm Upgrade**: It runs `helm upgrade --install` setting:
-    *   Domain: `devops-kube.galpodlipnik.com`
-    *   TLS: `true`
-    *   Ingress Class: `traefik` (Default for K3s)
-    *   Image Tag: `sha-a1b2c3d` (Ensuring the exact version you just built is deployed).
+![VPS Deployment](/images/deploy-to-vps-kube.png)
