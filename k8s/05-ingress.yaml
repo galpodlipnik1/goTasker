@@ -4,14 +4,14 @@ metadata:
   name: gotasker-ingress
   namespace: gotasker
   annotations:
-    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
-  # tls:
-  # - hosts:
-  #   - devops.radovan.si
-  #   secretName: gotasker-tls
+  tls:
+  - hosts:
+    - devops-kube.galpodlipnik.com
+    secretName: gotasker-tls
   rules:
   - host: localhost
     http:
